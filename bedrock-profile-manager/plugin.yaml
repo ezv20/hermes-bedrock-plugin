@@ -1,0 +1,5 @@
+name: bedrock-profile-manager
+kind: standalone
+version: 1.0.0
+description: AWS Bedrock inference-profile discovery, resolution, context-length mapping, and Hermes model-config writer (replaces bedrock-inference-profiles).
+author: Ironside Group
