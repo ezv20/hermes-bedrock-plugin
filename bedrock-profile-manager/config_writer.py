@@ -23,18 +23,34 @@ import tempfile
 from pathlib import Path
 from typing import Optional, Tuple
 
+# Profile-path resolvers live in Hermes core (hermes_cli.profiles). They are
+# imported at module load (not lazily) so callers/tests can monkeypatch them.
+# Guarded: the plugin is importable standalone (no hermes_cli) for unit tests.
+try:
+    from hermes_cli.profiles import get_active_profile_name, get_profile_dir
+except Exception:  # pragma: no cover — standalone/test import
+    get_active_profile_name = None  # type: ignore
+    get_profile_dir = None  # type: ignore
+
+
 _RESTART_WARNING = (
-    "⚠ Context length applies on next session start. The running agent fixed "
     "its context window at init; restart the Hermes session for "
     "model.context_length to take effect."
 )
 
 
 def _active_config_path() -> Path:
-    """Resolve the active Hermes profile's config.yaml path."""
-    from hermes_cli.config import get_config_path
+    """Resolve the ACTIVE Hermes profile's config.yaml path.
 
-    return get_config_path()
+    Critical: ``-p <name>`` sessions do NOT read the global
+    ``~/.hermes/config.yaml`` — they read
+    ``~/.hermes/profiles/<name>/config.yaml``. ``get_config_path()`` only
+    ever returns the GLOBAL file, so using it would write ``context_length``
+    somewhere the session never looks. Resolve the profile dir instead.
+    For the ``default`` profile this equals the global path (no regression).
+    """
+    name = (get_active_profile_name() or "default") if get_active_profile_name else "default"
+    return get_profile_dir(name) / "config.yaml" if get_profile_dir else Path.home() / ".hermes" / "config.yaml"
 
 
 def _atomic_write(path: Path, text: str) -> None:

@@ -18,6 +18,7 @@ import importlib.util
 import os
 import sys
 import types
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -358,6 +359,39 @@ def test_config_writer_writes_model_block_and_warns(tmp_path, monkeypatch):
     assert data["terminal"]["enabled"] is True
     # Backup exists.
     assert backup is not None and backup.exists()
+
+
+def test_use_targets_profile_scoped_config(monkeypatch):
+    """`use` must write to the PROFILE config, not global.
+
+    Regression guard: get_config_path() only returns the GLOBAL
+    ~/.hermes/config.yaml, but `-p hs-brands` sessions read
+    ~/.hermes/profiles/hs-brands/config.yaml. Writing to global is
+    silently ignored by the session (the 128k fallback never gets
+    overridden). This test proves the profile-scoped path is resolved.
+    """
+    calls = {}
+
+    def fake_get_active_profile_name():
+        return "hs-brands"
+
+    def fake_get_profile_dir(name):
+        calls["name"] = name
+        # Mirror Hermes' layout: default -> home, else profiles/<name>/
+        if name == "default":
+            return Path("/Users/ezv/.hermes")
+        return Path(f"/Users/ezv/.hermes/profiles/{name}")
+
+    monkeypatch.setattr(config_writer, "get_active_profile_name", fake_get_active_profile_name)
+    monkeypatch.setattr(config_writer, "get_profile_dir", fake_get_profile_dir)
+
+    resolved = config_writer._active_config_path()
+    assert calls["name"] == "hs-brands"
+    assert resolved == Path("/Users/ezv/.hermes/profiles/hs-brands/config.yaml")
+
+    # default profile collapses to global (no regression)
+    monkeypatch.setattr(config_writer, "get_active_profile_name", lambda: "default")
+    assert config_writer._active_config_path() == Path("/Users/ezv/.hermes/config.yaml")
 
 
 # --- loader-location guard: NOT under model-providers/ --------------------
