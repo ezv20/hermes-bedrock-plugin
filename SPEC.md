@@ -149,3 +149,68 @@ Reused as-is. Picker UX only.
 3. Example plugin + Hermes config. 4. Test results. 5. Bundled metadata map.
 6. List of core seams where no plugin hook exists (context length, runtime modelId —
    both config-only, by design).
+
+## Long-term architecture (2026-07-09)
+
+### What is already durable (keep)
+- **`use` → profile-scoped `model.context_length` write** (fix `27cb58c`).
+  `config_writer._active_config_path()` resolves
+  `hermes_cli.profiles.get_profile_dir(get_active_profile_name())`, so the
+  override lands in `~/.hermes/profiles/<name>/config.yaml` — the file a
+  `-p <name>` session actually reads. Global-vs-profile mismatch is dead.
+- **`aws_profile_map` declared in profile config** (added to hs-brands). The
+  `on_session_start` hook exports `AWS_PROFILE=frankencloud` for this
+  profile on a FRESH session, killing the interactive `NoCredentialsError`.
+- **Curated context-length registry** (`metadata.BUNDLED_CONTEXT_LENGTHS` +
+  per-profile `context_lengths` overrides). Fail-loud, never silently 128k.
+- **Two-plugin split** is correct and bump-proof (loader scans are disjoint —
+  see "Why two plugins" above). Do not consolidate.
+
+### The real long-term gap: gateway-level AWS_PROFILE injection
+The hook's `os.environ["AWS_PROFILE"] = ...` is **process-global and racy**
+in the multi-tenant gateway: one gateway process serves MANY Hermes profiles,
+so mutating the shared env for profile A corrupts profile B's calls. The hook
+is acceptable for single-profile CLI sessions only.
+
+The durable fix is **core-side, in the gateway worker spawn path**:
+1. Gateway reads each profile's `bedrock_profile_manager.aws_profile_map` (or a
+   top-level `aws_profile:` key) from `~/.hermes/profiles/<name>/config.yaml`.
+2. When it spawns the worker for profile `<name>`, it sets the worker's
+   `AWS_PROFILE` env from that map BEFORE the session starts — per-process
+   isolation, no shared-env race.
+3. Plugin A's hook then becomes a *redundant safety net* for interactive
+   single-profile CLI use, not the production mechanism.
+
+This is the only piece that cannot stay plugin-side. Track as a core patch
+(replayable like the existing bedrock transport/classification patch).
+
+### Runtime-API compatibility is the OTHER metadata axis
+AWS exposes NO context-length field via any API (confirmed: `GetInferenceProfile`
+and `GetFoundationModel` return no window; `BEDROCK_CONTEXT_LENGTHS` is
+hand-curated). So the numeric window is permanently a curated table.
+
+BUT the AWS "API compatibility by models" page
+(https://docs.aws.amazon.com/bedrock/latest/userguide/models-api-compatibility.html)
+is the authoritative source for the *second* axis the metadata table should
+eventually carry: **which runtime API family a model supports**. Hermes uses
+the **Converse** family (`bedrock_converse`). Confirmed Converse-capable
+relevant models (so any ISG inference profile over them is runtime-valid):
+- Moonshot: **Kimi K2.5** ✅ Invoke+Converse (our hs-brands model, 256K)
+- Anthropic: Claude Sonnet 4 / 4.5 / 4.6, Opus 4.1→4.8, Haiku 4.5,
+  Sonnet 5 — all ✅ Converse.
+A model lacking Converse support (Invoke-only) would be selectable in the picker
+but fail at runtime; the metadata/picker should eventually flag that. This is a
+future enhancement, not blocking — all current ISG profiles route through
+Converse-capable models.
+
+### Recommended sequencing
+1. **Now (validates the design):** run `use` for hs-brands, confirm footer
+   flips to `…/256K`. Then enumerate the other ISG profiles, add their
+   `aws_profile_map` + (if non-Claude/kimi) `context_lengths` entries, `use`
+   each, verify.
+2. **Short-term:** extend `BUNDLED_CONTEXT_LENGTHS` as ISG profiles surface
+   (Claude Sonnet/Opus rows need confirmation — currently placeholder).
+3. **Medium-term (core):** gateway worker AWS_PROFILE injection from
+   `aws_profile_map`. Retire reliance on the plugin hook for multi-tenant.
+4. **Optional:** picker/metadata Converse-support flag from the AWS compat
+   page, so `doctor` can warn on Invoke-only models.
