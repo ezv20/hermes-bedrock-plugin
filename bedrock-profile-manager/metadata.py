@@ -12,8 +12,9 @@ This module owns the curated mapping and a fail-loud resolver. Resolution order
     3. bundled metadata
     4. FAIL LOUD — raise ``ContextLengthUnknown``; never silently default to 128k.
 
-The bundled table below is the single source of truth for v1. Values marked
-PLACEHOLDER must be confirmed before shipping.
+The bundled tables live in `metadata_generated.py`, generated from AWS model
+cards by `scripts/gen_bedrock_metadata.py` (run it to refresh). No hand-typed
+or PLACEHOLDER values remain — every entry is sourced from a model card.
 """
 
 from __future__ import annotations
