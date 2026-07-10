@@ -21,18 +21,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-# --- bundled defaults (authoritative; verify before shipping) -----------------
-# kimi-k2-5 = 256000 CONFIRMED via AWS Bedrock model card
-# (https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k2-5.html)
-BUNDLED_CONTEXT_LENGTHS: Dict[str, int] = {
-    "moonshotai.kimi-k2-5": 256_000,
-    # anthropic.claude-sonnet-5: 1_000_000  # PLACEHOLDER — user to confirm
-}
-
-# Optional companion max-output token budget, surfaced for reference only.
-BUNDLED_MAX_OUTPUT_TOKENS: Dict[str, int] = {
-    "moonshotai.kimi-k2-5": 16_000,
-}
+from .metadata_generated import (
+    BUNDLED_CONTEXT_LENGTHS,
+    BUNDLED_MAX_OUTPUT_TOKENS,
+    BUNDLED_CONVERSE_SUPPORTED,
+    BUNDLED_SOURCES,
+)
 
 
 class ContextLengthUnknown(RuntimeError):

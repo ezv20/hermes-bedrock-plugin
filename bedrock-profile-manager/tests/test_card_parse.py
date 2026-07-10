@@ -14,7 +14,7 @@ def _load_pkg():
     pkg = types.ModuleType("bpm_pkg")
     pkg.__path__ = [_BASE]
     sys.modules["bpm_pkg"] = pkg
-    for mod in ("models", "metadata", "inference_profiles", "provider", "cli", "config_writer"):
+    for mod in ("models", "metadata_generated", "metadata", "inference_profiles", "provider", "cli", "config_writer"):
         modname = f"bpm_pkg.{mod}"
         sys.modules.pop(modname, None)
         spec = importlib.util.spec_from_file_location(modname, f"{_BASE}/{mod}.py")

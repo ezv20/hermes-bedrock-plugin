@@ -38,7 +38,7 @@ def _load_pkg():
     # at import time, so those submodules must be registered in sys.modules
     # BEFORE it is exec'd (otherwise importlib imports a second copy and
     # `ContextLengthUnknown` identity breaks). Load deps first.
-    for mod in ("models", "metadata", "inference_profiles", "provider", "cli", "config_writer"):
+    for mod in ("models", "metadata_generated", "metadata", "inference_profiles", "provider", "cli", "config_writer"):
         modname = f"bpm_pkg.{mod}"
         # Drop any stale module from a previous import attempt.
         sys.modules.pop(modname, None)
