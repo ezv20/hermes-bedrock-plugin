@@ -46,6 +46,7 @@ def _setup_argparse(subparser):
     p_use.add_argument("--region", default=None)
 
     p_doctor = subs.add_parser("doctor", help="Creds + context-length coverage")
+    p_doctor.add_argument("--identifier", default=None, help="Scope doctor to one profile (default: active Hermes profile)")
 
 
 def _dispatch(args):

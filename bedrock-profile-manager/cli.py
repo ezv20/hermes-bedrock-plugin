@@ -190,7 +190,16 @@ def cmd_doctor(args) -> str:
 
     region = resolve_region()
     out: List[str] = [f"Region: {region}"]
-    # Creds check.
+
+    # Determine scope: explicit identifier, else active Hermes profile.
+    identifier = getattr(args, "identifier", None)
+    if not identifier:
+        active = _current_hermes_profile()
+        if active:
+            cfg = _provider.load_config()
+            identifier = _resolve_name_to_identifier(active, cfg) or active
+
+    # Creds check (always runs; session-wide signal).
     try:
         _resolver().list_profiles(region=region, include_system_defined=False)
         aws_profile = _provider.apply_aws_profile_for_session(_current_hermes_profile())
@@ -199,7 +208,22 @@ def cmd_doctor(args) -> str:
     except Exception as exc:
         out.append(_error(f"Bedrock control-plane unreachable: {exc}"))
         return "\n".join(out)
-    # Context-length coverage: list APPLICATION profiles, flag unknowns.
+
+    # Context-length coverage.
+    if identifier:
+        # Scoped mode: check ONLY the target profile. Unknown mapping => WARN, not FAIL.
+        out.append(f"Context-length check (scoped to {identifier}):")
+        try:
+            r = _resolver().resolve(identifier, region=region, strict_context_length=True)
+            out.append(f"  ✅ {r.name or r.profile_id}: {r.context_length}")
+        except ContextLengthUnknown as exc:
+            out.append(f"  ⚠ {identifier}: NO context-length mapping yet — {exc}")
+            out.append("    Add it via bedrock_profile_manager.context_lengths in config, then re-run `use`.")
+        except Exception as exc:
+            out.append(f"  ⚠ {identifier}: resolve error {exc}")
+        return "\n".join(out)
+
+    # Unscoped fallback: list all APPLICATION, but WARN (never hard-fail) on gaps.
     out.append("Context-length coverage (APPLICATION profiles):")
     try:
         summaries = _resolver().list_profiles(region=region, include_system_defined=False)
@@ -214,11 +238,11 @@ def cmd_doctor(args) -> str:
             out.append(f"  ✅ {s.name or s.profile_id}: {r.context_length}")
         except ContextLengthUnknown:
             unknown += 1
-            out.append(f"  ❌ {s.name or s.profile_id}: NO context-length mapping")
+            out.append(f"  ⚠ {s.name or s.profile_id}: NO context-length mapping (add it)")
         except Exception as exc:
             out.append(f"  ⚠ {s.name or s.profile_id}: resolve error {exc}")
     out.append(
-        f"{'✅' if unknown == 0 else '❌'} {len(summaries) - unknown}/{len(summaries)} "
+        f"{'✅' if unknown == 0 else '⚠'} {len(summaries) - unknown}/{len(summaries)} "
         f"application profiles have a known context length."
     )
     return "\n".join(out)
