@@ -214,3 +214,7 @@ Converse-capable models.
    `aws_profile_map`. Retire reliance on the plugin hook for multi-tenant.
 4. **Optional:** picker/metadata Converse-support flag from the AWS compat
    page, so `doctor` can warn on Invoke-only models.
+
+## Related research
+
+- [Bedrock inference profile to model mapping options](./research/bedrock-inference-profile-model-mapping.md)
