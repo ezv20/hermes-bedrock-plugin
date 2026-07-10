@@ -44,6 +44,17 @@ def _resolve_name_to_identifier(name: str, cfg) -> Optional[str]:
 
 
 # --- formatting helpers -----------------------------------------------------
+def model_label(profile_id: str, model_ids: list) -> str:
+    """Lead with the natural model identity, ARN/profile id as secondary.
+
+    Inference profiles return only a profile id at runtime; the underlying
+    model name (e.g. moonshotai.kimi-k2-5) is the thing a human recognizes.
+    """
+    if model_ids:
+        return f"{model_ids[0]} ({profile_id})"
+    return str(profile_id)
+
+
 def _fmt_summary(s) -> str:
     typ = s.profile_type or "?"
     line = f"  - {s.name or s.profile_id}  [{typ}]"
@@ -74,7 +85,7 @@ def format_profiles(summaries: List) -> str:
 
 def format_resolved(r) -> str:
     lines = [
-        f"Profile: {r.name or r.profile_id}",
+        f"Profile: {model_label(r.profile_id, r.model_ids)}",
         f"  id:        {r.profile_id}",
         f"  arn:       {r.profile_arn}",
         f"  type:      {r.profile_type}",
