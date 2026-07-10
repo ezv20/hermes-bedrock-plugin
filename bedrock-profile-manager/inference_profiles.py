@@ -67,6 +67,7 @@ class ResolvedBedrockProfile:
     max_output_tokens: Optional[int] = None
     context_length_source: Optional[str] = None
     context_length_warning: Optional[str] = None
+    converse_supported: Optional[bool] = None
 
 
 class ResolutionError(RuntimeError):
@@ -304,6 +305,13 @@ class BedrockInferenceProfileResolver:
             resolved.context_length = cl.context_length
             resolved.max_output_tokens = cl.max_output_tokens
             resolved.context_length_source = cl.source
+
+        # Converse support (pre-flight gate). Resolve from the first model id
+        # that has a metadata entry; otherwise None (unknown).
+        for mid in model_ids:
+            if mid in metadata.BUNDLED_CONVERSE_SUPPORTED:
+                resolved.converse_supported = metadata.converse_supported(mid)
+                break
 
         self._cache.put(cache_key, resolved)
         return resolved

@@ -98,6 +98,16 @@ def resolve_context_length(
     )
 
 
+def converse_supported(model_id: str) -> bool:
+    """True if the bundled metadata records Converse support. Default False.
+
+    Used as a pre-flight gate so a Converse-incompatible underlying model is
+    caught before a call is made (the runtime never reports the model name on
+    an inference-profile call).
+    """
+    return bool(BUNDLED_CONVERSE_SUPPORTED.get(model_id, False))
+
+
 def best_effort_context_length(
     *,
     model_ids: list[str],

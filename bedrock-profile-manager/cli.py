@@ -90,6 +90,8 @@ def format_resolved(r) -> str:
         lines.append(f"  context_length_source: {r.context_length_source}")
     if r.context_length_warning:
         lines.append(f"  ⚠ context_length: {r.context_length_warning}")
+    if r.converse_supported is not None:
+        lines.append(f"  converse_supported: {r.converse_supported}")
     if r.tags:
         lines.append(f"  tags:      {r.tags}")
     return "\n".join(lines)
