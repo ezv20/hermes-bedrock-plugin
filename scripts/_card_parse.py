@@ -33,12 +33,11 @@ def _num(text: str) -> int:
 
 def parse_model_card(model_id: str, html: str, source_url: str = "") -> ModelCardRecord:
     def _field(label: str) -> str | None:
+        # AWS card uses <b>Label:</b> value</p> (verified live 2026-07-09).
         m = re.search(
-            rf"<(?:li|strong)[^>]*>\s*<strong>{label}:</strong>\s*(.*?)\s*</",
+            rf"<b>{label}:</b>\s*(.*?)\s*</p>",
             html, re.I | re.S,
         )
-        if not m:
-            m = re.search(rf"{label}:\s*</strong>\s*(.*?)</", html, re.I | re.S)
         return m.group(1) if m else None
 
     ctx_raw = _field("Context window")
