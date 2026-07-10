@@ -1,5 +1,5 @@
 # Add a model = add one URL. Run: uv run --with pyyaml --with requests python scripts/gen_bedrock_metadata.py
-moonshotai.kimi-k2-5:
+moonshotai.kimi-k2.5:
   url: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-moonshot-ai-kimi-k2-5.html
 anthropic.claude-sonnet-4-5:
   url: https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-4-5.html

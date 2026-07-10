@@ -45,8 +45,8 @@ HTML_KIMI = """
 
 
 def test_parse_kimi_card():
-    rec = parse_model_card("moonshotai.kimi-k2-5", HTML_KIMI)
-    assert rec.model_id == "moonshotai.kimi-k2-5"
+    rec = parse_model_card("moonshotai.kimi-k2.5", HTML_KIMI)
+    assert rec.model_id == "moonshotai.kimi-k2.5"
     assert rec.context_length == 256_000
     assert rec.max_output_tokens == 16_000
     assert rec.converse_supported is True
@@ -71,7 +71,7 @@ def test_parse_live_kimi_card():
     with urllib.request.urlopen(req, timeout=30) as resp:
         html = resp.read().decode("utf-8", "replace")
 
-    rec = parse_model_card("moonshotai.kimi-k2-5", html, source_url=url)
+    rec = parse_model_card("moonshotai.kimi-k2.5", html, source_url=url)
     assert rec.context_length == 256_000, rec
     assert rec.max_output_tokens == 16_000, rec
     assert rec.converse_supported is True, rec

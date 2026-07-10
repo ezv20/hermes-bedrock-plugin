@@ -31,7 +31,7 @@ from bpm_pkg import metadata as _metadata
 from bpm_pkg import inference_profiles as _ip
 
 
-def _resolved(identifier="zk4k1w56ontt", model_id="moonshotai.kimi-k2-5", ctx=256000):
+def _resolved(identifier="zk4k1w56ontt", model_id="moonshotai.kimi-k2.5", ctx=256000):
     return SimpleNamespace(
         name="hs-brands", profile_id=identifier, profile_arn=identifier,
         profile_type="APPLICATION", status="ACTIVE", model_ids=[model_id],

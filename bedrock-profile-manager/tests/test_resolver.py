@@ -157,7 +157,7 @@ def test_resolve_attaches_kimi_256k_context_length():
         "type": "APPLICATION",
         "status": "ACTIVE",
         "models": [
-            {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k2-5"}
+            {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k2.5"}
         ],
     }
     with mock.patch.object(ip, "get_control_client") as gclient:
@@ -203,8 +203,8 @@ def test_resolve_fail_loud_unknown_context_length():
 def test_context_override_precedence():
     # model-id override beats bundled
     cl = metadata.resolve_context_length(
-        model_ids=["moonshotai.kimi-k2-5"],
-        overrides={"moonshotai.kimi-k2-5": 999_999},
+        model_ids=["moonshotai.kimi-k2.5"],
+        overrides={"moonshotai.kimi-k2.5": 999_999},
     )
     assert cl.context_length == 999_999
     assert cl.source == "model-override"
@@ -212,9 +212,9 @@ def test_context_override_precedence():
     # ARN override beats model-id override
     arn = "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc"
     cl2 = metadata.resolve_context_length(
-        model_ids=["moonshotai.kimi-k2-5"],
+        model_ids=["moonshotai.kimi-k2.5"],
         profile_arn=arn,
-        overrides={"moonshotai.kimi-k2-5": 999_999, arn: 111_111},
+        overrides={"moonshotai.kimi-k2.5": 999_999, arn: 111_111},
     )
     assert cl2.context_length == 111_111
     assert cl2.source == "arn-override"
@@ -289,7 +289,7 @@ def test_pre_api_request_logs_profile_routing(caplog):
         "type": "APPLICATION",
         "status": "ACTIVE",
         "models": [
-            {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k2-5"}
+            {"modelArn": "arn:aws:bedrock:us-east-1::foundation-model/moonshotai.kimi-k2.5"}
         ],
     }
     fake_client = mock.Mock()
@@ -318,7 +318,7 @@ def test_pre_api_request_logs_profile_routing(caplog):
     log_text = caplog.text
     assert "bedrock.profile.resolved" in log_text
     assert "bedrock.profile.request" in log_text
-    assert "moonshotai.kimi-k2-5" in log_text
+    assert "moonshotai.kimi-k2.5" in log_text
     assert "APPLICATION" in log_text
 
 

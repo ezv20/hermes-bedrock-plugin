@@ -27,16 +27,16 @@ from scripts.gen_bedrock_metadata import render_metadata_module, MODEL_SOURCES
 
 def test_render_module_is_parseable():
     rendered = render_metadata_module({
-        "moonshotai.kimi-k2-5": {
+        "moonshotai.kimi-k2.5": {
             "context_length": 256_000, "max_output_tokens": 16_000,
             "converse_supported": True, "source_url": "https://x/y.html",
         }
     })
     ns: dict = {}
     exec(compile(rendered, "<generated>", "exec"), ns)
-    assert ns["BUNDLED_CONTEXT_LENGTHS"]["moonshotai.kimi-k2-5"] == 256_000
-    assert ns["BUNDLED_MAX_OUTPUT_TOKENS"]["moonshotai.kimi-k2-5"] == 16_000
-    assert ns["BUNDLED_CONVERSE_SUPPORTED"]["moonshotai.kimi-k2-5"] is True
+    assert ns["BUNDLED_CONTEXT_LENGTHS"]["moonshotai.kimi-k2.5"] == 256_000
+    assert ns["BUNDLED_MAX_OUTPUT_TOKENS"]["moonshotai.kimi-k2.5"] == 16_000
+    assert ns["BUNDLED_CONVERSE_SUPPORTED"]["moonshotai.kimi-k2.5"] is True
 
 
 def test_sources_registry_shape():
@@ -47,8 +47,8 @@ def test_sources_registry_shape():
 
 def test_generated_imports_under_harness():
     gen = sys.modules["bpm_pkg.metadata_generated"]
-    assert gen.BUNDLED_CONTEXT_LENGTHS["moonshotai.kimi-k2-5"] == 256_000
+    assert gen.BUNDLED_CONTEXT_LENGTHS["moonshotai.kimi-k2.5"] == 256_000
     assert gen.BUNDLED_CONTEXT_LENGTHS["anthropic.claude-sonnet-5"] == 1_000_000
     assert gen.BUNDLED_CONTEXT_LENGTHS["anthropic.claude-sonnet-4-5"] == 200_000
-    assert gen.BUNDLED_SOURCES["moonshotai.kimi-k2-5"].startswith("https://")
+    assert gen.BUNDLED_SOURCES["moonshotai.kimi-k2.5"].startswith("https://")
     assert gen.BUNDLED_CONVERSE_SUPPORTED["anthropic.claude-sonnet-5"] is True
