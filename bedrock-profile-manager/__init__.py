@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 
 from . import cli, provider
+from .bedrock_provider import register_bedrock_provider
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,15 @@ def _dispatch(args):
 
 def register(ctx):
     cfg = provider.load_config()
+
+    # Register the Bedrock model provider (single source of truth for the
+    # `bedrock` name). This keeps the inference-profile picker surfacing
+    # inside Plugin A rather than a separate model-provider dir, so the
+    # whole feature set survives `hermes update` from this one repo.
+    try:
+        register_bedrock_provider()
+    except Exception as exc:  # provider registration is best-effort
+        logger.debug("bedrock-profile-manager: provider registration skipped: %s", exc)
 
     # `hermes bedrock-profiles scan | resolve | use | doctor`
     ctx.register_cli_command(
