@@ -197,32 +197,53 @@ def cmd_use(args) -> str:
     return "\n".join(out)
 
 
+def _aws_auth_mechanism_status(active: str | None, cfg) -> str:
+    """Plugin-housed AWS auth strategy (no core patch).
+
+    The session worker is a process-isolated subprocess (tui_gateway spawns
+    each worker via subprocess.Popen start_new_session), so the
+    on_session_start hook's `os.environ["AWS_PROFILE"] = ...` is already
+    per-profile safe. The only thing that can break is a missing config
+    mapping. This reports whether the active profile is wired to an AWS
+    profile via bedrock_profile_manager.aws_profile_map.
+    """
+    if active and active in (cfg.aws_profile_map or {}):
+        return (
+            f"✅ AWS auth mechanism: profile '{active}' -> AWS_PROFILE="
+            f"{cfg.aws_profile_map[active]} (applied per-worker by on_session_start)."
+        )
+    out = (
+        "⚠ AWS auth mechanism: no bedrock_profile_manager.aws_profile_map "
+        f"entry for active profile '{active or '(unknown)'}'.\n"
+    )
+    if active:
+        out += (
+            f"   Add `aws_profile_map: {{ {active}: <aws-sso-profile> }}` under "
+            "bedrock_profile_manager: in this profile's config.yaml."
+        )
+    return out
+
+
 def cmd_doctor(args) -> str:
     from .inference_profiles import resolve_region
-    from .patches import assess_auth_coverage
 
     region = resolve_region()
     out: List[str] = [f"Region: {region}"]
 
-    # Auth-coverage summary (all three deployment shapes).
-    cov = assess_auth_coverage()
-    out.append("Bedrock auth coverage:")
-    out.append(f"  • single-profile CLI:     {cov['cli_hook']}")
-    out.append(f"  • separate-process:       {cov['separate_process']}")
-    out.append(f"  • shared multi-tenant gateway: {cov['shared_gateway_patch']}")
-    if not cov["gateway_fork_present"]:
-        out.append(
-            "    (fork not found at ~/.hermes/hermes-agent; set HERMES_AGENT_DIR "
-            "if your fork lives elsewhere — gateway detection skipped.)"
-        )
-    out.append("")
-
+    # Auth-mechanism verification (plugin-housed, no core patch needed).
+    # The strategy: on_session_start sets AWS_PROFILE from aws_profile_map
+    # INSIDE the session worker, which is a process-isolated subprocess
+    # (tui_gateway spawns each worker via subprocess.Popen start_new_session),
+    # so the env-set is already per-profile safe. We verify the config is
+    # wired (active profile -> AWS profile mapping present) rather than
+    # detecting a fork patch.
+    active = _current_hermes_profile()
+    cfg = _provider.load_config()
+    out.append(_aws_auth_mechanism_status(active, cfg))
     # Determine scope: explicit identifier, else active Hermes profile.
     identifier = getattr(args, "identifier", None)
     if not identifier:
-        active = _current_hermes_profile()
         if active:
-            cfg = _provider.load_config()
             identifier = _resolve_name_to_identifier(active, cfg) or active
 
     # Creds check (always runs; session-wide signal).
@@ -274,21 +295,6 @@ def cmd_doctor(args) -> str:
     return "\n".join(out)
 
 
-def cmd_patch_gateway(args) -> str:
-    """Re-apply the gateway AWS_PROFILE injection patch to the fork.
-
-    Idempotent: if the marker is already present in the live fork, reports
-    "already applied" and does nothing. Refuses (with a clear message) if
-    the patch no longer applies cleanly after a rebase.
-    """
-    from .patches import apply_gateway_patch
-
-    # Honor HERMES_AGENT_DIR if set; otherwise the conventional fork path.
-    fork = os.environ.get("HERMES_AGENT_DIR")
-    fork_dir = Path(fork) if fork else None
-    return apply_gateway_patch(fork_dir)
-
-
 def _current_hermes_profile() -> Any:
     try:
         from hermes_cli.profiles import get_active_profile_name
@@ -333,17 +339,12 @@ def slash_bedrock(raw_args: str) -> str:
         class _A:
             pass
         return cmd_doctor(_A())
-    if sub == "patch-gateway":
-        class _A:
-            pass
-        return cmd_patch_gateway(_A())
     return (
         "Bedrock inference-profile commands:\n"
         "  /bedrock-profiles scan <aws-profile>   list profiles in that SSO profile\n"
         "  /bedrock-profiles resolve <name|arn>  resolve one profile + context length\n"
         "  /bedrock-profiles use <name|arn>      write model: block (restart to apply)\n"
         "  /bedrock-profiles doctor                creds + context-length coverage\n"
-        "  /bedrock-profiles patch-gateway        re-apply gateway AWS_PROFILE injection\n"
         "  /bedrock-profiles help                 this message\n"
         "Profiles are passed to Bedrock at runtime exactly as shown (ARNs and dots "
         "preserved). Set AWS_PROFILE in the session env for auth, or map your Hermes "
