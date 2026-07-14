@@ -19,15 +19,15 @@ WHY A HOOK AND NOT requestMetadata:
   request.
 
 CORE LIMITATION (documented, not hidden):
-  * Setting ``AWS_PROFILE`` via os.environ is safe for single-profile CLI sessions
-    (``hermes -p hs-brands``). The multi-tenant gateway runs ONE process serving
-    MANY Hermes profiles, so an os.environ mutation is process-global and racy.
-    For the gateway you still need the core ``profile_name=`` patch on the boto3
-    client (out of plugin scope).
-  * The /model picker is a SEPARATE plugin (kind: model-provider at
-    ``~/.hermes/plugins/model-providers/bedrock/``). This plugin owns
-    discovery/introspection/config-write/observability; that plugin owns picker
-    surfacing. One cannot absorb the other (loaders are disjoint — see SPEC.md).
+  * Setting ``AWS_PROFILE`` via os.environ is safe for the gateway too: each
+    session worker is a process-isolated subprocess
+    (``tui_gateway/server.py`` spawns via ``subprocess.Popen(start_new_session=True)``
+    with its own env dict), so the env-set is per-profile, not process-global.
+    No core patch is needed (verified 2026-07-14).
+  * The model picker (``bedrock`` provider) is registered by THIS plugin via
+    ``bedrock_provider.register_bedrock_provider()`` inside ``register(ctx)``
+    (commit 9037339). There is no separate model-provider plugin — the old
+    ``~/.hermes/plugins/model-providers/bedrock/`` dir was retired.
 """
 
 from __future__ import annotations

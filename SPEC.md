@@ -7,30 +7,40 @@ This is plugin-safe and survives `hermes update` because `agent_init.py:1632` re
 `model.context_length` into `_config_context_length`, which `get_model_context_length`
 honors as resolution step 0 (before the Bedrock table).
 
-## Why two plugins (not one) — verified against the loader
-The generic plugin loader (`hermes_cli/plugins.py:1337`) explicitly SKIPS `model-providers/`
-in its scan (`skip_names={"memory","context_engine","platforms","model-providers"}`).
-The provider registry (`providers/__init__.py`) ONLY scans `plugins/model-providers/<name>/`
-and imports `__init__.py` expecting a `register_provider()` call — it does NOT read
-`plugin.yaml` or invoke `register(ctx)`.
+## Architecture (locked): ONE plugin, no core patch
 
-So a single directory cannot be both a `kind: standalone` plugin (with CLI/hooks/skill)
-AND register a model provider. **One plugin cannot consolidate both surfaces.** The two-plugin
-design is the consolidated bump-proof form. This plugin project produces both:
+We do NOT patch Hermes core, and we do NOT need a second model-provider plugin.
+A single `kind: standalone` plugin (`bedrock-profile-manager`) consolidates
+everything: discovery, resolution, metadata registry, context-length mapping,
+config writer, CLI, slash command, observability hook, AND the `bedrock`
+model-provider registration (folded in via `register(ctx)` →
+`register_provider()`, see `bedrock_provider.py`).
 
-- **Plugin A — `bedrock-profile-manager`** (`kind: standalone`, at
-  `~/.hermes/plugins/bedrock-profile-manager/`)
-  Owns: discovery, resolution, metadata registry, context-length mapping, config writer,
-  CLI (`hermes bedrock-profiles <sub>`), slash command, observability hook.
-  This consolidates the full feature set of the old `bedrock-inference-profiles` plugin.
-- **Plugin B — `bedrock`** (`kind: model-provider`, at
-  `~/.hermes/plugins/model-providers/bedrock/`)
-  Owns ONLY the `/model` picker UX: overrides `fetch_models()` to return
-  application-inference-profile ARNs, preserves dotted IDs, keeps
-  `api_mode="bedrock_converse"` and `auth_type="aws_sdk"`. Picker display only.
-  Context length is NEVER sourced from here — it is materialized into config by Plugin A.
+Why one plugin works (loader reality, verified):
+- The generic plugin loader calls a standalone plugin's `register(ctx)`. Inside
+  `register(ctx)` we may call `register_provider()` directly, which mutates the
+  global provider registry. So a standalone plugin CAN register a model provider.
+- The `kind: standalone` MUST be EXPLICIT in `plugin.yaml`. Without it, the
+  PluginManager's source-text heuristic auto-coerces any plugin that calls
+  `register_provider()` at module level into `kind: model-provider` and then
+  skips `register(ctx)` — breaking the CLI/hooks. Explicit kind avoids that.
+- A separate `kind: model-provider` dir under `plugins/model-providers/` is NOT
+  needed and was removed (it would be a redundant, repo-external copy that the
+  lazy provider scanner could overwrite — last-writer-wins).
 
-The old `bedrock-inference-profiles` standalone plugin is SUPERSEDED by Plugin A.
+AWS auth (the part that used to need a core patch):
+- Each session worker is a PROCESS-ISOLATED subprocess
+  (`tui_gateway/server.py` spawns via `subprocess.Popen(..., start_new_session=True)`
+  with an explicit env dict). Therefore `on_session_start` setting
+  `os.environ["AWS_PROFILE"]` is already per-profile safe — NOT racy — in the
+  gateway. The old "process-global and racy" claim was wrong for the worker path,
+  and the gateway parent makes no Bedrock inference calls itself.
+- So the plugin's `on_session_start` hook (mapping `aws_profile_map` →
+  `AWS_PROFILE`) is the production mechanism. No core patch, survives
+  `hermes update`.
+
+The old `bedrock-inference-profiles` standalone plugin and the separate
+`bedrock` model-provider plugin are both SUPERSEDED by this single plugin.
 
 ## Context-window discovery: what is and isn't dynamic
 - **Profile → underlying model mapping: DYNAMIC.** `GetInferenceProfile` resolves an
@@ -127,8 +137,10 @@ Note: `scan` takes `--aws-profile` (matches config `aws_profile:`), NOT `--accou
 - `anthropic.claude-sonnet-5`: 1000000 (PLACEHOLDER — user to confirm)
 - extend as ISG profiles enumerate.
 
-## Plugin B — `bedrock` model-provider (unchanged)
-Reused as-is. Picker UX only.
+## Model provider (folded into Plugin A)
+The `bedrock` provider registration lives in `bedrock_provider.py` and is wired
+by `register(ctx)` (commit 9037339). No separate model-provider plugin/dir exists.
+`doctor` verifies the provider registered with a non-None `fetch_models`.
 
 ## Tests (10 categories + guards)
 1. dotted ID preservation (no dot→hyphen)
@@ -163,26 +175,26 @@ Reused as-is. Picker UX only.
   profile on a FRESH session, killing the interactive `NoCredentialsError`.
 - **Curated context-length registry** (`metadata.BUNDLED_CONTEXT_LENGTHS` +
   per-profile `context_lengths` overrides). Fail-loud, never silently 128k.
-- **Two-plugin split** is correct and bump-proof (loader scans are disjoint —
-  see "Why two plugins" above). Do not consolidate.
+- **One plugin, no core patch** (loaders + gateway verified 2026-07-14). The
+  `bedrock` provider is registered inside Plugin A's `register(ctx)`. The
+  `on_session_start` hook maps `aws_profile_map` → `AWS_PROFILE`; session
+  workers are isolated subprocesses so this is per-profile safe. Do not
+  reintroduce a separate model-provider plugin or a core gateway patch.
 
-### The real long-term gap: gateway-level AWS_PROFILE injection
-The hook's `os.environ["AWS_PROFILE"] = ...` is **process-global and racy**
-in the multi-tenant gateway: one gateway process serves MANY Hermes profiles,
-so mutating the shared env for profile A corrupts profile B's calls. The hook
-is acceptable for single-profile CLI sessions only.
+### AWS auth — plugin-housed, no core patch (verified 2026-07-14)
 
-The durable fix is **core-side, in the gateway worker spawn path**:
-1. Gateway reads each profile's `bedrock_profile_manager.aws_profile_map` (or a
-   top-level `aws_profile:` key) from `~/.hermes/profiles/<name>/config.yaml`.
-2. When it spawns the worker for profile `<name>`, it sets the worker's
-   `AWS_PROFILE` env from that map BEFORE the session starts — per-process
-   isolation, no shared-env race.
-3. Plugin A's hook then becomes a *redundant safety net* for interactive
-   single-profile CLI use, not the production mechanism.
+The `on_session_start` hook maps `aws_profile_map[hermes_profile]` →
+`AWS_PROFILE`. This is per-profile SAFE because each gateway session worker is a
+process-isolated subprocess (`subprocess.Popen(..., start_new_session=True)` with
+its own env dict), not a thread in a shared process. The earlier "process-global
+and racy in the multi-tenant gateway" claim was incorrect for the worker path, and
+the gateway parent makes no Bedrock inference calls of its own.
 
-This is the only piece that cannot stay plugin-side. Track as a core patch
-(replayable like the existing bedrock transport/classification patch).
+Therefore there is NO core patch to maintain. The plugin's hook IS the production
+mechanism. `doctor` verifies the mapping is wired for the active profile; it does
+not detect a fork patch (there is none). If a second device shows
+`NoCredentialsError`, the cause is a missing `aws_profile_map` entry for that
+Hermes profile in that device's profile config — not a missing patch.
 
 ### Runtime-API compatibility is the OTHER metadata axis
 AWS exposes NO context-length field via any API (confirmed: `GetInferenceProfile`
