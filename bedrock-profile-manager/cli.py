@@ -13,6 +13,7 @@ Commands (registered as `hermes bedrock-profiles <sub>`):
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from . import config_writer, metadata, provider as _provider
@@ -198,9 +199,23 @@ def cmd_use(args) -> str:
 
 def cmd_doctor(args) -> str:
     from .inference_profiles import resolve_region
+    from .patches import assess_auth_coverage
 
     region = resolve_region()
     out: List[str] = [f"Region: {region}"]
+
+    # Auth-coverage summary (all three deployment shapes).
+    cov = assess_auth_coverage()
+    out.append("Bedrock auth coverage:")
+    out.append(f"  • single-profile CLI:     {cov['cli_hook']}")
+    out.append(f"  • separate-process:       {cov['separate_process']}")
+    out.append(f"  • shared multi-tenant gateway: {cov['shared_gateway_patch']}")
+    if not cov["gateway_fork_present"]:
+        out.append(
+            "    (fork not found at ~/.hermes/hermes-agent; set HERMES_AGENT_DIR "
+            "if your fork lives elsewhere — gateway detection skipped.)"
+        )
+    out.append("")
 
     # Determine scope: explicit identifier, else active Hermes profile.
     identifier = getattr(args, "identifier", None)
@@ -259,6 +274,21 @@ def cmd_doctor(args) -> str:
     return "\n".join(out)
 
 
+def cmd_patch_gateway(args) -> str:
+    """Re-apply the gateway AWS_PROFILE injection patch to the fork.
+
+    Idempotent: if the marker is already present in the live fork, reports
+    "already applied" and does nothing. Refuses (with a clear message) if
+    the patch no longer applies cleanly after a rebase.
+    """
+    from .patches import apply_gateway_patch
+
+    # Honor HERMES_AGENT_DIR if set; otherwise the conventional fork path.
+    fork = os.environ.get("HERMES_AGENT_DIR")
+    fork_dir = Path(fork) if fork else None
+    return apply_gateway_patch(fork_dir)
+
+
 def _current_hermes_profile() -> Any:
     try:
         from hermes_cli.profiles import get_active_profile_name
@@ -303,13 +333,18 @@ def slash_bedrock(raw_args: str) -> str:
         class _A:
             pass
         return cmd_doctor(_A())
+    if sub == "patch-gateway":
+        class _A:
+            pass
+        return cmd_patch_gateway(_A())
     return (
         "Bedrock inference-profile commands:\n"
         "  /bedrock-profiles scan <aws-profile>   list profiles in that SSO profile\n"
         "  /bedrock-profiles resolve <name|arn>  resolve one profile + context length\n"
         "  /bedrock-profiles use <name|arn>      write model: block (restart to apply)\n"
-        "  /bedrock-profiles doctor               creds + context-length coverage\n"
-        "  /bedrock-profiles help                this message\n\n"
+        "  /bedrock-profiles doctor                creds + context-length coverage\n"
+        "  /bedrock-profiles patch-gateway        re-apply gateway AWS_PROFILE injection\n"
+        "  /bedrock-profiles help                 this message\n"
         "Profiles are passed to Bedrock at runtime exactly as shown (ARNs and dots "
         "preserved). Set AWS_PROFILE in the session env for auth, or map your Hermes "
         "profile to an AWS profile in config (bedrock_profile_manager.aws_profile_map)."

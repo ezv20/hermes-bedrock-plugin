@@ -1,0 +1,55 @@
+# Gateway AWS_PROFILE per-profile worker injection
+#
+# Goal: in the multi-tenant shared gateway, isolate each Hermes profile's
+# AWS_PROFILE to its OWN worker process env, instead of the process-global
+# os.environ mutation the bedrock-profile-manager on_session_start hook does
+# (which races across profiles in one gateway).
+#
+# This is the ONLY case a plugin cannot solve natively: there is no plugin
+# hook at worker/gateway spawn with env access. So this minimal, additive
+# 18-line patch lives at the spawn seam (tui_gateway/server.py, inside
+# _SlashWorker env construction). It reads bedrock_profile_manager.aws_profile_map
+# from the profile's config.yaml and sets AWS_PROFILE for that worker only.
+#
+# Replayability: this patch is a RE-CREATABLE artifact pinned to an upstream
+# base. After `hermes update` rebases the fork, re-apply with:
+#   hermes bedrock-profiles patch-gateway
+# The plugin's doctor command detects when the live fork is missing the
+# marker and warns, so a dropped patch is caught, not discovered via a
+# NoCredentialsError.
+#
+# Applies to: tui_gateway/server.py (around the `env["HERMES_HOME"] = ...`
+# line inside _SlashWorker env setup).
+#
+# NOTE: single-profile CLI sessions and separate-process deployments need
+# NO patch — the on_session_start hook (CLI) or process env (separate
+# process) already isolate correctly. This patch only matters for the
+# shared multi-tenant gateway.
+
+--- a/tui_gateway/server.py
++++ b/tui_gateway/server.py
+@@ -303,6 +303,24 @@ class _SlashWorker:
+             # gateway's launch HERMES_HOME (#40677).
+             env["HERMES_HOME"] = str(profile_home)
+ 
++        # Per-profile AWS_PROFILE injection (bedrock-profile-manager long-term fix).
++        # The on-session-start hook can only set AWS_PROFILE process-globally, which
++        # races in the multi-tenant gateway. Setting it here isolates it to this
++        # worker's environment (the worker launches with start_new_session=True).
++        _bpm_map = {}
++        try:
++            import yaml
++
++            _cfg_path = Path(profile_home) / "config.yaml" if profile_home else None
++            if _cfg_path and _cfg_path.exists():
++                _cfg = yaml.safe_load(_cfg_path.read_text()) or {}
++                _bpm_map = (_cfg.get("bedrock_profile_manager") or {}).get("aws_profile_map") or {}
++        except Exception:
++            _bpm_map = {}
++        _aws_profile = _bpm_map.get(Path(profile_home).name) if profile_home else None
++        if _aws_profile:
++            env["AWS_PROFILE"] = _aws_profile
++
+         # start_new_session=True detaches the slash worker into its own
+         # process group / session. Without this, the worker inherits the
+         # gateway's pgid (= TUI parent PID). When mcp_tool's

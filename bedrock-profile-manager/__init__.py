@@ -49,6 +49,8 @@ def _setup_argparse(subparser):
     p_doctor = subs.add_parser("doctor", help="Creds + context-length coverage")
     p_doctor.add_argument("--identifier", default=None, help="Scope doctor to one profile (default: active Hermes profile)")
 
+    p_patch = subs.add_parser("patch-gateway", help="Re-apply gateway AWS_PROFILE injection to the fork")
+
 
 def _dispatch(args):
     """Sole `func` for the `bedrock-profiles` CLI command.
@@ -66,6 +68,8 @@ def _dispatch(args):
         print(cli.cmd_use(args))
     elif sub == "doctor":
         print(cli.cmd_doctor(args))
+    elif sub == "patch-gateway":
+        print(cli.cmd_patch_gateway(args))
     else:  # scan or no subcommand
         print(cli.cmd_scan(args))
 
