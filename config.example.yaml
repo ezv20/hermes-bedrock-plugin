@@ -1,0 +1,44 @@
+# Example bedrock_profile_manager: config block
+#
+# Copy the `bedrock_profile_manager:` block below into a Hermes PROFILE's
+# config.yaml — i.e. ~/.hermes/profiles/<profile-name>/config.yaml
+# (NOT the global ~/.hermes/config.yaml, unless you want it global).
+#
+# This block is PER-DEVICE and PER-PROFILE. It is environment-specific, so
+# it is NOT committed anywhere — you paste it on each device for each
+# Hermes profile that uses Bedrock. See SETUP.md step 5.
+#
+# After adding this, run `/bedrock-profiles use <arn>` INSIDE the
+# `hermes -p <profile>` session so model.context_length is written
+# profile-scoped, then restart the session.
+
+bedrock_profile_manager:
+  # Hermes-profile-name -> AWS SSO/profile name that can assume the
+  # Bedrock account. on_session_start exports AWS_PROFILE from this.
+  # Without it you get NoCredentialsError on Bedrock calls.
+  aws_profile_map:
+    hs-brands: frankencloud
+
+  # Optional context-length overrides. Key = model-id OR profile-ARN,
+  # value = window in tokens. The bundled registry already knows
+  # moonshotai.kimi-k2.5 = 256000, so this is usually empty.
+  # IMPORTANT: keys use DOTS (moonshotai.kimi-k2.5), never hyphens.
+  context_lengths: {}
+  #   moonshotai.kimi-k2.5: 256000
+
+  # Optional named profiles for `use`/resolution shortcuts.
+  # Key = short name; value = { identifier, aws_profile, region }.
+  profiles: {}
+  #   my-kimi:
+  #     identifier: arn:aws:bedrock:us-east-1:992382841830:...
+  #     aws_profile: frankencloud
+  #     region: us-east-1
+
+  # Toggles (all default to the shown values if omitted).
+  enabled: true
+  discovery_enabled: true
+  include_system_defined: true
+  include_application: true
+  cache_ttl_seconds: 3600
+  preserve_dots: true
+  request_observability: true

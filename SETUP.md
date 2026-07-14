@@ -71,7 +71,9 @@ hermes bedrock-profiles doctor
 The plugin reads `bedrock_profile_manager:` from the ACTIVE Hermes
 profile's `config.yaml` (`~/.hermes/profiles/<name>/config.yaml`). This is
 per-device and per-profile, so it is NOT committed. For each Hermes profile
-that uses Bedrock (e.g. `hs-brands`), add:
+that uses Bedrock (e.g. `hs-brands`), add the block from
+[`config.example.yaml`](./config.example.yaml) (copy the
+`bedrock_profile_manager:` key as-is, adjust the profile names):
 
 ```yaml
 bedrock_profile_manager:
