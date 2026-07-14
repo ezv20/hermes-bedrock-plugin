@@ -7,3 +7,18 @@ __pycache__/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Tool/agent junk (not part of the plugin; keep out of the remote)
+.claude/
+.codex/
+.cursor/
+.opencode/
+.pi/
+.ok/
+.mcp.json
+.opencode.json
+.okignore
+articles/
+external-sources/
+research/
+log.md

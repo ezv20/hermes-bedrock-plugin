@@ -1,5 +1,0 @@
-name: bedrock
-kind: model-provider
-version: 1.0.0
-description: AWS Bedrock provider that surfaces inference profiles (application + system-defined) in the hermes model picker.
-author: Ironside
